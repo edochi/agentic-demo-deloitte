@@ -470,4 +470,8 @@ if __name__ == "__main__":
             )
         )
 
-        print(result)
+        for i, msg in enumerate(result['messages']):
+            print(f"\n--- Messaggio {i} ---")
+            print(f"Tipo: {msg['kwargs'].get('type', '')}")
+            print(f"Testo: {msg['kwargs'].get('content', '')}")
+            print(f"Tool calls: {len(msg['kwargs'].get('tool_calls', []))}")
