@@ -19,21 +19,38 @@ from langchain_core.tools import tool
 from langchain_google_vertexai import ChatVertexAI
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
+import wikipedia
+import requests
+import base64
 
 LOCATION = "us-central1"
 LLM = "gemini-2.0-flash-001"
 
-
 # 1. Define tools
 @tool
-def search(query: str) -> str:
-    """Simulates a web search. Use it get information on weather"""
-    if "sf" in query.lower() or "san francisco" in query.lower():
-        return "It's 60 degrees and foggy."
-    return "It's 90 degrees and sunny."
+def search_wiki_page(topic: str) -> list[str]:
+    """Search on wikipedia for a specific page. Use it to get the name of the page you want to analyze"""
+    search = wikipedia.search(topic)
+    return search
 
+@tool
+def get_wiki_information(page: str) -> str:
+    """Get a summary of a wikipedia page. Use it to get the summarization of the page you want to analyze"""
+    summary = wikipedia.summary(page)
+    LOCATION = "us-central1"
+    LLM = "gemini-2.0-flash-001"
+    llm = ChatVertexAI(model=LLM, location=LOCATION, temperature=0, max_tokens=1024, project='qwiklabs-gcp-02-44d130f8f4a0')
+    messages = [
+        (
+            "system",
+            "You have to create a summary of the text provided by the user. Your summary will be used by a tour guide. Return only the summary without any comment or explanation.",
+        ),
+        ("human", summary)
+        ]
+    agent_summary=llm.invoke(messages).content
+    return agent_summary
 
-tools = [search]
+tools = [search_wiki_page, get_wiki_information]
 
 # 2. Set up the language model
 llm = ChatVertexAI(
@@ -50,7 +67,7 @@ def should_continue(state: MessagesState) -> str:
 
 def call_model(state: MessagesState, config: RunnableConfig) -> dict[str, BaseMessage]:
     """Calls the language model and returns the response."""
-    system_message = "You are a helpful AI assistant."
+    system_message = "You are a helpful AI assistant that returns summarization of some topics using your tools to retrieve data from wikipedia."
     messages_with_system = [{"type": "system", "content": system_message}] + state[
         "messages"
     ]
@@ -71,3 +88,27 @@ workflow.add_edge("tools", "agent")
 
 # 6. Compile the workflow
 agent = workflow.compile()
+
+"""
+json={
+  "input": {
+    "text": agent_summary
+  },
+  "voice": {
+    "languageCode": "en-gb",
+    "name": "en-GB-Standard-A",
+    "ssmlGender": "FEMALE"
+  },
+  "audioConfig": {
+    "audioEncoding": "MP3"
+  }
+}
+headers={"Authorization": "Bearer ya29.a0AeXRPp44IPsKCtIN2QIjyAY8GOBubN-LhoPJK79HveL70LzTVBJhq2BJwL41T5GxhMUpQS4OR44VXy_KteRid68_C1MFABjbe_cDTIOM-Ha6x89WxrX5eKSF7cYvEb4njq_SjbLiJ7zkvhJFjzXkaWZqp_BkJRRSW-eiJ28ORMUPB1HL78rt0mnWtc4yc4CWD_CYeEXpxD4RtkpB7ymwsd-uTIrkU26TuoMbXfWGb-9DMVdxsQ5Myrp_PQdzLDnePyNP53ez5FWx3GvWfk5vpg924Wy9rmZreLuPYRXRgBYJGhbwACGc_zguQlJAQBzylpwtIv9SN1PdZ7X6IGmwbRlWF9YxxoHO3Pl2kkycMV9oPqjY1L9elrrrs47aLDSx5thwb6OkMwGBrnPcLk-q5Izdnx8V8lPzHJZnaQaCgYKAUQSARISFQHGX2Mi5wlxcSQmjYzX94Xb7jqFLQ0429",
+        "x-goog-user-project": "qwiklabs-gcp-02-44d130f8f4a0",
+        "Content-Type": "application/json; charset=utf-8"}
+data = requests.post('https://texttospeech.googleapis.com/v1/text:synthesize',json=json, headers=headers)
+print(data.json())
+decoded_data = base64.b64decode(data.json()['audioContent'])
+with open ('test_audio.mp3', 'wb') as f_audio:
+    f_audio.write(decoded_data)
+"""
