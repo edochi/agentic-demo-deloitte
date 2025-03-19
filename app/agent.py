@@ -1,20 +1,7 @@
-# Copyright 2025 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# mypy: disable-error-code="union-attr"
+import base64
 import inspect
 from collections.abc import Callable, Mapping, Sequence
+from operator import itemgetter
 from typing import (
     Annotated,
     Any,
@@ -24,23 +11,28 @@ from typing import (
     overload,
 )
 
+import requests
 import vertexai
+import wikipedia
+from classes import PlacesList, PlacesListSimplified, PlaceTypes
 from langchain_core.messages import BaseMessage, ToolMessage
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import PromptTemplate
 from langchain_core.runnables import (
     RunnableConfig,
+    RunnableLambda,
+    RunnableParallel,
+    RunnableSequence,
 )
 from langchain_core.tools import tool
 from langchain_core.tools.base import InjectedToolCallId
 from langchain_google_vertexai import ChatVertexAI
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.message import add_messages
 from langgraph.managed import IsLastStep, RemainingSteps
 from langgraph.prebuilt import InjectedState, create_react_agent
 from langgraph.types import Command
 from pydantic import BaseModel, TypeAdapter, ValidationError
-
-from app.classes import PlacesList, PlacesListSimplified, PlaceTypes
-
-# from langgraph.checkpoint.memory import MemorySaver
 
 TOther = TypeVar("TOther")
 TBaseModel = TypeVar("TBaseModel", bound=BaseModel)
@@ -133,18 +125,21 @@ class FieldGetter:
         return TypeAdapter(output_type).validate_python(value)
 
 
+LLM = "gemini-2.0-flash-001"
+
 vertexai.init(
     project="genai-hub-426413",  # Your project ID.
     location="europe-west1",  # Your cloud region.
     staging_bucket="gs://test-hackaton-1",  # Your staging bucket.
 )
 
+llm = ChatVertexAI(
+    model=LLM,
+    temperature=0.2,
+    max_tokens=4096,
+    streaming=True,
+)
 
-# LOCATION = "europe-west1"
-LLM = "gemini-2.0-flash-001"
-
-
-# Tour Guide System Prompt
 SYSTEM_PROMPT = """
 You are an expert tour guide agent who creates personalized itineraries. Your task is to help the user plan a day visit to a specific city. Be kind, cheerful and friendly, and always proactive.
 
@@ -189,6 +184,9 @@ You MUST follow these steps and use tools as indicated:
 5. ITINERARY MODIFICATIONS:
    - If the user requests changes, update the itinerary while maintaining the general structure
 
+6. ITINERARY FINALIZATION:
+    - When the user is satisfied with the itinerary, ask if they want to finalize it by creating a brief description and a short audio guide for each place in the itinerary.
+
 ## IMPORTANT GUIDELINES
 - Always be proactive and suggest starting points and themes.
 - ALWAYS use the provided tools.
@@ -197,6 +195,44 @@ You MUST follow these steps and use tools as indicated:
 - Always communicate with the user using the language they are using.
 - TO CALL A TOOL, USE THE TOOL SCHEMA AND THE TOOL NAME, do not use "print.(default_api...)"
 """
+
+WIKIPEDIA_ARTICLE_CHOOSER_PROMPT = """
+Given the following location {location}, which of the following Wikipedia articles do you think is the most related to it?
+
+{matches}
+
+Please answer with the exact name of the article that you think is the most related to the location.
+"""
+
+PLACES_SUMMARY_PROMPT = """
+Read all the information about this place.
+
+{place_info}
+
+Write a very brief summary/review of this place to present to a tourist.
+"""
+
+
+def get_headers_speech_to_text():
+    return {
+        "Content-Type": "application/json; charset=utf-8",
+    }
+
+
+def get_body_speech_to_text(input_text: str):
+    return {
+        "input": {"text": input_text},
+        "voice": {
+            "languageCode": "en-gb",
+            "name": "en-GB-Standard-A",
+            "ssmlGender": "FEMALE",
+        },
+        "audioConfig": {"audioEncoding": "MP3"},
+    }
+
+
+def get_decoded_body_from_response(response):
+    return base64.b64decode(response["audioContent"])
 
 
 class AgentState(TypedDict, total=False):
@@ -208,6 +244,123 @@ class AgentState(TypedDict, total=False):
     places_list: PlacesList
     tour: list[str]
     places_list_tour: PlacesList
+    finalized_tour: list[dict[str, Any]]
+
+
+@tool
+def finalize_tour(
+    tool_call_id: Annotated[str, InjectedToolCallId],
+    state: Annotated[dict, InjectedState],
+    config: RunnableConfig,
+) -> Command:
+    """
+    Use this tool when the user is satisfied with the tour and wants to finalize it.
+
+    This tool will generate a brief description and a short audio guide for each place in the tour list.
+
+    Returns:
+        A message confirming the tour is finalized and each place's description and audio guide.
+    """
+
+    to_search_on_wikipedia = [
+        "museum",
+        "historical_landmark",
+        "historical_place",
+        "monument",
+        "sculpture",
+        "cultural_landmark",
+        "national_park",
+        "point_of_interest",
+    ]
+
+    places_list_tour = FieldGetter(state).get_field("places_list_tour", PlacesList, raise_error_if_missing=False)
+    print(places_list_tour)
+    if places_list_tour is None:
+        raise ValueError("The tour is still empty")
+
+    places_to_search_on_wikipedia = [
+        place
+        for place in places_list_tour.places
+        if not set(place.types).isdisjoint(set(to_search_on_wikipedia))
+    ]
+
+    simple_summary_chain = RunnableSequence(
+        PromptTemplate.from_template(PLACES_SUMMARY_PROMPT),
+        llm,
+        StrOutputParser(),
+    )
+
+    wikipedia_chain = RunnableSequence(
+        RunnableParallel(
+            location=RunnableLambda(lambda x: x),
+            matches=RunnableLambda(lambda x: wikipedia.search(x.displayName.text)),  # type: ignore
+        ),
+        RunnableParallel(
+            location=itemgetter("location"),
+            summary=RunnableSequence(
+                PromptTemplate.from_template(WIKIPEDIA_ARTICLE_CHOOSER_PROMPT),
+                llm,
+                StrOutputParser(),
+                RunnableLambda(lambda x: wikipedia.summary(x.strip())),  # type: ignore
+            ),
+        ),
+    )
+
+    simple_summary_chain = RunnableSequence(
+        PromptTemplate.from_template(PLACES_SUMMARY_PROMPT),
+        llm,
+        StrOutputParser(),
+    )
+
+    results: list[dict[str, Any]] = []
+    for place in places_list_tour.places:
+        print(place.displayName.text)
+        if place.displayName.text in places_to_search_on_wikipedia:
+            try:
+                result = wikipedia_chain.invoke(place)
+            except Exception:
+                try:
+                    result = {
+                        "location": place.displayName.text,
+                        "summary": simple_summary_chain.invoke(place),
+                    }
+                except Exception:
+                    print(f"Failed to get information for {place.displayName.text}")
+                    continue
+        else:
+            try:
+                result = {
+                    "location": place.displayName.text,
+                    "summary": simple_summary_chain.invoke(place),
+                }
+            except Exception:
+                print(f"Failed to get information for {place.displayName.text}")
+                continue
+
+        response = requests.post(
+            "https://texttospeech.googleapis.com/v1/text:synthesize?key=AIzaSyDjoRzcHj72yIdFPSLTr4bJ5ywR7ltwVXY",
+            json=get_body_speech_to_text(result["summary"]),
+            headers=get_headers_speech_to_text(),
+        )
+        audio_data = get_decoded_body_from_response(response.json())
+        audio_base64 = (
+            f"data:audio/mp3;base64,{base64.b64encode(audio_data).decode('utf-8')}"
+        )
+        result["audio_file"] = audio_base64
+
+        results.append(result)
+
+    return Command(
+        update={
+            "messages": [
+                ToolMessage(
+                    content="The tour is finalized has been finalized",
+                    tool_call_id=tool_call_id,
+                )
+            ],
+            "finalized_tour": results,
+        }
+    )
 
 
 @tool
@@ -279,16 +432,13 @@ def places_nearby(
 
     try:
         place = places_list.get_by_display_name(place_display_name)
-        print(f"Found place {place} - OK")
-    except IndexError as e:
+    except IndexError:
         try:
             places_result = PlacesList.search_places(place_display_name)
             if not places_result.places:
                 raise ValueError(f"No places found for {place_display_name}")
             place = places_result.places[0]
             places_list.append(place)
-            print(f"Found place {place} - OK 2")
-            print(f"Places list: {places_list} - OK 2")
         except ValidationError as e:
             raise Exception(
                 f"Error validating place data for {place_display_name}: {e}"
@@ -363,7 +513,9 @@ def add_place_to_tour(
             ) from e
 
     tour.append(place.displayName.text)
-    places_list_tour = places_list.get_by_display_names(tour)
+    places_list_tour = PlacesList(places=places_list.get_by_display_names(tour))
+    print(places_list_tour)
+    print(type(places_list_tour))
 
     return Command(
         update={
@@ -432,24 +584,17 @@ def remove_place_from_tour(
     )
 
 
-tools = [place_search, places_nearby, add_place_to_tour, remove_place_from_tour]
+tools = [place_search, places_nearby, add_place_to_tour, remove_place_from_tour, finalize_tour]
 
 
-llm = ChatVertexAI(
-    model=LLM,
-    temperature=0.2,
-    max_tokens=4096,
-    streaming=True,
-).bind_tools(tools)
-
-# checkpointer = MemorySaver()
+checkpointer = MemorySaver()
 
 agent = create_react_agent(
-    llm,
+    llm.bind_tools(tools),
     tools,
     state_schema=AgentState,
     prompt=SYSTEM_PROMPT,
-    # checkpointer=checkpointer,
+    checkpointer=checkpointer,
 )
 
 if __name__ == "__main__":
