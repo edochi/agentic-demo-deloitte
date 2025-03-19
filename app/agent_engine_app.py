@@ -25,11 +25,11 @@ import google.auth
 import vertexai
 from google.cloud import logging as google_cloud_logging
 from langchain_core.runnables import RunnableConfig
-from traceloop.sdk import Instruments, Traceloop
+# from traceloop.sdk import Instruments, Traceloop
 from vertexai.preview import reasoning_engines
 
 from app.utils.gcs import create_bucket_if_not_exists
-from app.utils.tracing import CloudTraceLoggingSpanExporter
+# from app.utils.tracing import CloudTraceLoggingSpanExporter
 from app.utils.typing import Feedback, InputChat, dumpd, ensure_valid_config
 
 logging.basicConfig(
@@ -61,15 +61,15 @@ class AgentEngineApp:
         self.logger = logging_client.logger(__name__)
 
         # Initialize Telemetry
-        try:
-            Traceloop.init(
-                app_name="langgraph-2",
-                disable_batch=False,
-                exporter=CloudTraceLoggingSpanExporter(project_id=self.project_id),
-                instruments={Instruments.LANGCHAIN, Instruments.CREW},
-            )
-        except Exception as e:
-            logging.error("Failed to initialize Telemetry: %s", str(e))
+        # try:
+        #     Traceloop.init(
+        #         app_name="langgraph-2",
+        #         disable_batch=False,
+        #         exporter=CloudTraceLoggingSpanExporter(project_id=self.project_id),
+        #         instruments={Instruments.LANGCHAIN, Instruments.CREW},
+        #     )
+        # except Exception as e:
+        #     logging.error("Failed to initialize Telemetry: %s", str(e))
 
         self.runnable = agent
 
@@ -80,16 +80,17 @@ class AgentEngineApp:
         Args:
             config: Optional RunnableConfig containing request metadata
         """
-        config = ensure_valid_config(config)
-        Traceloop.set_association_properties(
-            {
-                "log_type": "tracing",
-                "run_id": str(config["run_id"]),
-                "user_id": config["metadata"].pop("user_id", "None"),
-                "session_id": config["metadata"].pop("session_id", "None"),
-                "commit_sha": os.environ.get("COMMIT_SHA", "None"),
-            }
-        )
+        # config = ensure_valid_config(config)
+        # Traceloop.set_association_properties(
+        #     {
+        #         "log_type": "tracing",
+        #         "run_id": str(config["run_id"]),
+        #         "user_id": config["metadata"].pop("user_id", "None"),
+        #         "session_id": config["metadata"].pop("session_id", "None"),
+        #         "commit_sha": os.environ.get("COMMIT_SHA", "None"),
+        #     }
+        # )
+        pass
 
     def stream_query(
         self,
@@ -101,7 +102,7 @@ class AgentEngineApp:
         """Stream responses from the agent for a given input."""
 
         config = ensure_valid_config(config)
-        self.set_tracing_properties(config=config)
+        # self.set_tracing_properties(config=config)
         # Validate input. We assert the input is a list of messages
         input_chat = InputChat.model_validate(input)
 

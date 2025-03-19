@@ -37,12 +37,12 @@ EMPTY_CHAT_NAME = "Empty chat"
 def setup_page() -> None:
     """Configure the Streamlit page settings."""
     st.set_page_config(
-        page_title="Playground",
+        page_title="Wander AI",
         layout="wide",
         initial_sidebar_state="auto",
         menu_items=None,
     )
-    st.title("Playground")
+    st.title("Wander AI")
     st.markdown(MARKDOWN_STR, unsafe_allow_html=True)
 
 

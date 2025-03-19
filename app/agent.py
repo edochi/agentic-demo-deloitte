@@ -14,7 +14,6 @@ from typing import (
 import requests
 import vertexai
 import wikipedia
-from classes import PlacesList, PlacesListSimplified, PlaceTypes
 from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import PromptTemplate
@@ -27,12 +26,13 @@ from langchain_core.runnables import (
 from langchain_core.tools import tool
 from langchain_core.tools.base import InjectedToolCallId
 from langchain_google_vertexai import ChatVertexAI
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.message import add_messages
 from langgraph.managed import IsLastStep, RemainingSteps
 from langgraph.prebuilt import InjectedState, create_react_agent
 from langgraph.types import Command
 from pydantic import BaseModel, TypeAdapter, ValidationError
+
+from app.classes import PlacesList, PlacesListSimplified, PlaceTypes
 
 TOther = TypeVar("TOther")
 TBaseModel = TypeVar("TBaseModel", bound=BaseModel)
@@ -273,7 +273,9 @@ def finalize_tour(
         "point_of_interest",
     ]
 
-    places_list_tour = FieldGetter(state).get_field("places_list_tour", PlacesList, raise_error_if_missing=False)
+    places_list_tour = FieldGetter(state).get_field(
+        "places_list_tour", PlacesList, raise_error_if_missing=False
+    )
     print(places_list_tour)
     if places_list_tour is None:
         raise ValueError("The tour is still empty")
@@ -584,17 +586,20 @@ def remove_place_from_tour(
     )
 
 
-tools = [place_search, places_nearby, add_place_to_tour, remove_place_from_tour, finalize_tour]
+tools = [
+    place_search,
+    places_nearby,
+    add_place_to_tour,
+    remove_place_from_tour,
+    finalize_tour,
+]
 
-
-checkpointer = MemorySaver()
 
 agent = create_react_agent(
     llm.bind_tools(tools),
     tools,
     state_schema=AgentState,
     prompt=SYSTEM_PROMPT,
-    checkpointer=checkpointer,
 )
 
 if __name__ == "__main__":
