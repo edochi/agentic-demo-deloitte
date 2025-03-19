@@ -314,25 +314,49 @@ def get_landmark_description(places: list[Place]):
         "national_park",
         "point_of_interest"
     ]
-    for place in places:
-        print(place.model_dump()["types"])
-        if bool(set(place.model_dump()["types"]) & set(possible_types)):
-            result = get_tour_guide_summary(place.model_dump()["display_name"])
+    results = []
 
-            if result['summary']:
+    for place in places:
+        place_data = {
+            "name": place.display_name.text,
+            "address": place.formatted_address,
+        }
+
+        if bool(set(place.model_dump()["types"]) & set(possible_types)):
+            # Use simple description for places with recognized types
+            description = get_simple_description(place)
+            place_data["description"] = description
+        else:
+            # Use tour guide summary for other places
+            result = get_tour_guide_summary(place.display_name.text)
+
+            if result["summary"]:
+                place_data["description"] = result["summary"]
+            else:
+                place_data["description"] = "No description available"
+
+        # Generate audio for the description (for all places)
+        if (
+            place_data.get("description")
+            and place_data["description"] != "No description available"
+        ):
+            try:
                 response = requests.post(
                     "https://texttospeech.googleapis.com/v1/text:synthesize?key=AIzaSyDjoRzcHj72yIdFPSLTr4bJ5ywR7ltwVXY",
                     json=get_body_speech_to_text(result["summary"]),
                     headers=get_headers_speech_to_text(),
                 )
-                with open("test_audio.mp3", "wb") as f_audio:
-                    f_audio.write(get_decoded_body_from_respopnse(response.json()))
+                print("RESPONSE")
+                # Convert audio to base64 for embedding in the response
+                audio_data = get_decoded_body_from_respopnse(response.json())
+                audio_base64 = f"data:audio/mp3;base64,{audio_data.decode('utf-8')}"
+                place_data["audio_file"] = audio_base64
+            except Exception as e:
+                print(f"Error generating audio for {place_data['name']}: {str(e)}")
 
-                return result["wiki_content"]
-            
-        else:
-            description = get_simple_description(place)
-            return description
+        results.append(place_data)
+
+    return {"places": results}
 
 
 places = PlacesList.search_places("Bosco Verticale Milano")
