@@ -1,4 +1,5 @@
 # import datetime
+import base64
 import json
 
 # import logging
@@ -345,10 +346,9 @@ def get_landmark_description(places: list[Place]):
                     json=get_body_speech_to_text(place_data["description"]),
                     headers=get_headers_speech_to_text(),
                 )
-                print("RESPONSE")
                 # Convert audio to base64 for embedding in the response
                 audio_data = get_decoded_body_from_respopnse(response.json())
-                audio_base64 = f"data:audio/mp3;base64,{audio_data.decode('utf-8')}"
+                audio_base64 = f"data:audio/mp3;base64,{base64.b64encode(audio_data).decode('utf-8')}"
                 place_data["audio_file"] = audio_base64
             except Exception as e:
                 print(f"Error generating audio for {place_data['name']}: {str(e)}")
@@ -358,5 +358,5 @@ def get_landmark_description(places: list[Place]):
     return {"places": results}
 
 
-places = PlacesList.search_places("Fontana di Trevi")
-print(get_landmark_description(places.places))
+# places = PlacesList.search_places("Fontana di Trevi")
+# print(get_landmark_description(places.places))

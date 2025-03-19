@@ -3,7 +3,7 @@ import base64
 
 def get_headers_speech_to_text():
     return {
-        "Authorization": "Bearer ya29.a0AeXRPp6S9q6RStfooTtAfy37Z-LYJC718sa63qRE_JJ_pUlflH22RXWwUQ5oAfULy9KYom_DCzORGVhk23bjhcnq2UEVS4lZ3eUwmw2bKkD6yv3TPeidZc-rNIG4WGlxaan0RJ1Y6g2O8WuxwW5JYS56F00A0iRb4Hw1MoJ_-fcnAS1nzvX6pbLJt97sO6cnerVxNBU2VAP5SE1DliovG1TyNkCFmjyFMtEb-KIpnOHGq_fadkCpvjKxqI27m9yhX0hDEaEqverWjemTbqg8QKfMbSZdc6VvUIWnbyBeKk6132Vxm6iTeBuqIB9vgmsH3iDE-ZA1pSl8aw5U6pQzO5x8GArkW4AduOnKjJ6-Y2d9yJ7qKv-MnX9pq-4gxjr6abLPdbELRaScBahIdjZhMF-UlN1_ATK-WwaCgYKAU4SARISFQHGX2MisE8-KkGr7jnVNRCMpGw6fA0425",
+        "Authorization": "Bearer ya29.a0AeXRPp4fvBM40k8jOsCXcRM1QPrHazamHXG1zSuF5PcIFK__va8wBPo4wn1cUvtMC1_KUuGn4aphFeWguhSk6GjxlC070oDQA8d_B9PrUcAH15YFHiQH8tfO0Kj6dQKP038rVWJH87uQsjtRf9k0pH7nB95hrcelZuGklMR86wm5brX1hX2RhDhe_sT0fhzMG39trE885VgTj9ZguSqGgRPjgmAZvkslOuswgn6lk_2VNXDj6wVFr0N_C2vJn3oUrwrRz7SHoJIa0OFGFQMK2tMcnmQmUpklf74D8iAeOFe4VRSAv6TXPmr6cx3aGHQcvnNRLStynGH6Y4kcgxXbHKj6LGslIbQhDsKKU47nd2dfJEeEY_9LMJfmm5yAfiJt--oDjwaH805MzGcDwNtjaunNgmP3ctDlwhsdaCgYKAY8SARISFQHGX2MiGS7ra9cTyFGgBL4jo9LWFQ0427",
         "x-goog-user-project": "qwiklabs-gcp-02-44d130f8f4a0",
         "Content-Type": "application/json; charset=utf-8",
     }
