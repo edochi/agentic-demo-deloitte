@@ -63,7 +63,7 @@ class AgentEngineApp:
         # Initialize Telemetry
         try:
             Traceloop.init(
-                app_name="langgraph-2",
+                app_name="agent-tour-guide",
                 disable_batch=False,
                 exporter=CloudTraceLoggingSpanExporter(project_id=self.project_id),
                 instruments={Instruments.LANGCHAIN, Instruments.CREW},
@@ -171,7 +171,7 @@ def deploy_agent_engine_app(
     agent_config = {
         "reasoning_engine": agent,
         "display_name": agent_name,
-        "description": "This is a sample custom application in Agent Engine that uses LangGraph",
+        "description": "This agent helps the user to create a guided one-day tour of a user specified location.",
         "extra_packages": extra_packages,
     }
     logging.info(f"Agent config: {agent_config}")
@@ -215,11 +215,13 @@ if __name__ == "__main__":
         help="GCP project ID (defaults to application default credentials)",
     )
     parser.add_argument(
-        "--location", default="us-central1", help="GCP region (defaults to us-central1)"
+        "--location",
+        default="us-central1",
+        help="GCP region (defaults to us-central1)",
     )
     parser.add_argument(
         "--agent-name",
-        default="langgraph-2",
+        default="agent-tour-guide",
         help="Name for the agent engine",
     )
     parser.add_argument(
@@ -266,3 +268,24 @@ if __name__ == "__main__":
         extra_packages=args.extra_packages,
         env_vars=env_vars,
     )
+
+    # agent = AgentEngineApp(
+    #     project_id="genai-hub-426413", env_vars=SETTINGS.model_dump()
+    # )
+    # agent.set_up()
+
+    # while True:
+    #     user_message = input("Enter a message to send to the agent: ")
+    #     result = agent.query(
+    #         input={
+    #             "messages": [
+    #                 (
+    #                     "user",
+    #                     user_message,
+    #                 )
+    #             ]
+    #         },
+    #         config=RunnableConfig(configurable={"thread_id": "2"}),
+    #         stream_mode="values",
+    #     )
+    #     print(result)

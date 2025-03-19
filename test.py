@@ -7,6 +7,7 @@ import vertexai
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from vertexai import agent_engines
+from langchain_core.runnables import RunnableConfig
 
 
 class Settings(BaseSettings):
@@ -27,7 +28,22 @@ vertexai.init(
 )
 
 # %%
-agents = [agent for agent in agent_engines.list()]
+# agents = [agent for agent in agent_engines.list()]
 
-agent = agents[0]
-print(agent)
+# agent = agents[0]
+
+agent = agent_engines.get('projects/889354480933/locations/us-central1/reasoningEngines/1016133462018490368')
+
+
+print(agent.query(
+            input={
+            "messages": [
+                (
+                    "user",
+                    'what can you do?',
+                )
+            ]
+        },
+        config=RunnableConfig(configurable={"thread_id": "2"}),
+        stream_mode="values",
+))

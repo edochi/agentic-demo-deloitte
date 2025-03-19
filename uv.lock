@@ -22,6 +22,7 @@ dependencies = [
     { name = "langchain-openai" },
     { name = "langgraph" },
     { name = "opentelemetry-exporter-gcp-trace" },
+    { name = "pydantic-settings" },
     { name = "traceloop-sdk" },
 ]
 
@@ -65,6 +66,7 @@ requires-dist = [
     { name = "langgraph", specifier = "~=0.2.63" },
     { name = "mypy", marker = "extra == 'lint'", specifier = "~=1.15.0" },
     { name = "opentelemetry-exporter-gcp-trace", specifier = "~=1.9.0" },
+    { name = "pydantic-settings", specifier = ">=2.8.1" },
     { name = "ruff", marker = "extra == 'lint'", specifier = ">=0.4.6" },
     { name = "streamlit", marker = "extra == 'streamlit'", specifier = "~=1.42.0" },
     { name = "streamlit-extras", marker = "extra == 'streamlit'", specifier = "~=0.4.3" },
