@@ -312,8 +312,10 @@ def get_landmark_description(places: list[Place]):
         "sculpture",
         "cultural_landmark",
         "national_park",
+        "point_of_interest"
     ]
     for place in places:
+        print(place.model_dump()["types"])
         if bool(set(place.model_dump()["types"]) & set(possible_types)):
             result = get_tour_guide_summary(place.model_dump()["display_name"])
 
@@ -333,5 +335,5 @@ def get_landmark_description(places: list[Place]):
             return description
 
 
-places = PlacesList.search_places("Colosseo")
+places = PlacesList.search_places("Bosco Verticale Milano")
 print(get_landmark_description(places.places))
