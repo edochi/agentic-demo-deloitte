@@ -317,19 +317,21 @@ def get_landmark_description(places: list[Place]):
         if not bool(set(place.model_dump()["types"]) & set(possible_types)):
             result = get_tour_guide_summary(place.model_dump()["display_name"])
 
-            response = requests.post(
-                "https://texttospeech.googleapis.com/v1/text:synthesize",
-                json=get_body_speech_to_text(result["summary"]),
-                headers=get_headers_speech_to_text(),
-            )
-            with open("test_audio.mp3", "wb") as f_audio:
-                f_audio.write(get_decoded_body_from_respopnse(response.json()))
+            if result['summary']:
+                response = requests.post(
+                    "https://texttospeech.googleapis.com/v1/text:synthesize",
+                    json=get_body_speech_to_text(result["summary"]),
+                    headers=get_headers_speech_to_text(),
+                )
+                with open("test_audio.mp3", "wb") as f_audio:
+                    f_audio.write(get_decoded_body_from_respopnse(response.json()))
 
-            return result["wiki_content"]
+                return result["wiki_content"]
+            
         else:
             description = get_simple_description(place)
             return description
 
 
-places = PlacesList.search_places("milano bosco verticale")
+places = PlacesList.search_places("Fontana di Trevi")
 print(get_landmark_description(places.places))

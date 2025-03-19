@@ -27,7 +27,6 @@ class WikiTourState(TypedDict):
 def search_wiki_page(topic: str) -> list[str]:
     """Search on wikipedia for a specific page. Use it to get the name of the page you want to analyze"""
     search = wikipedia.search(topic)
-    print(search)
     return search
 
 @tool
@@ -54,6 +53,10 @@ llm = ChatVertexAI(
 def should_continue(state: WikiTourState) -> str:
     """Determines whether to use tools or end the conversation."""
     last_message = state["messages"][-1]
+    
+    # Se summary è stata impostata a stringa vuota (errore), termina
+    if state.get("summary") == "":
+        return END
     
     # Check if this is the final AI message with a summary
     if isinstance(last_message, AIMessage) and not last_message.tool_calls:
@@ -123,6 +126,22 @@ def process_tool_calls(state: WikiTourState) -> WikiTourState:
             new_state["selected_page"] = page
             result = get_wiki_content.invoke(page)
             new_state["wiki_content"] = result
+            
+            # Verifica se il risultato contiene un errore
+            if result.startswith("Error retrieving Wikipedia page"):
+                # Imposta summary come stringa vuota
+                new_state["summary"] = ""
+                # Aggiungi il messaggio di errore come tool result
+                tool_results.append(ToolMessage(
+                    name=tool_name, 
+                    content=result, 
+                    tool_call_id=tool_call_id
+                ))
+                # Aggiungi alla lista dei messaggi
+                new_state["messages"] = messages + tool_results
+                # Ritorna lo stato così com'è per terminare il flusso
+                return new_state
+            
             tool_results.append(ToolMessage(
                 name=tool_name, 
                 content=result, 
