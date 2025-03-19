@@ -1,18 +1,3 @@
-# Copyright 2025 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# mypy: disable-error-code="union-attr"
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
@@ -94,7 +79,6 @@ def call_model(state: WikiTourState, config: RunnableConfig) -> WikiTourState:
         - Only after you have collected information using the tools should you create your final summary.
         - Focus on interesting facts, historical significance, and engaging details that would interest tourists. Keep it short.
         - After using the tools, return only the final summary, without including any additional comment or introduction.
-        - If you encounter an error after a tool call, then the final summary you return must be a blank string (""), without any additional comment or introduction.
     """
     
     messages_with_system = [{"type": "system", "content": system_message}] + state["messages"]
@@ -171,46 +155,3 @@ workflow.add_edge("tools", "agent")
 
 # 7. Compile the workflow
 autonomous_agent = workflow.compile()
-
-# 8. Function to run the autonomous agent and return the complete custom state
-def get_tour_guide_summary(topic: str) -> WikiTourState:
-    """
-    Run the agent to research a topic and return a custom state with all relevant information.
-    
-    Args:
-        topic: The topic to research
-        
-    Returns:
-        WikiTourState containing Wikipedia content and tour guide summary
-    """
-    initial_state = initialize_agent(topic)
-    final_state = autonomous_agent.invoke(initial_state)
-    
-    # Return the complete custom state
-    return final_state
-
-def get_landmark_description(topic: str):
-    summary = get_tour_guide_summary(topic)['summary']
-    json={
-        "input": {
-            "text": summary
-        },
-        "voice": {
-            "languageCode": "en-gb",
-            "name": "en-GB-Standard-A",
-            "ssmlGender": "FEMALE"
-        },
-        "audioConfig": {
-            "audioEncoding": "MP3"
-        }
-    }
-    headers={"Authorization": "Bearer ya29.a0AeXRPp5urN8iUFropcX02yVgpmiNMWERUIxeXeV9GJ0MsRdK97wCq6rC2UhAWTcBlGwhpF0K-dM_0bHgVt_6ifir8rLHUw7QHf17IWSQnQeYoAiyBZEFViK1e0CyYml91N8F5brlvelvzjVhgOfY0JCI_oZb6KwjS_7IAdcMBF8LizOm9idvzgr3EfCwoB51ZnWpTo08BPL_h60mTIQiXtTXvRVuciLGVhehAgtO46zYj_dx0jCnrfD9sP7szm3NEkLb3pvuz8jGhPYvs3O460VQWFvnsXmx8cIZmNSP4o7ylNhRJ447Bzw1jMEzVTnT0nBanbZgawE0GpPYb8YkM7AkdvofAWzp6eDB_hCOU6JOA8S4JCTTfJ5cHFb-NXe38OLw5huWK4LEs2PFphoys5n_xo1ovxGKjCtiJUsaCgYKAUISARISFQHGX2MiOPcBMmL18lzkjXuWMqtj6g0430",
-            "x-goog-user-project": PROJECT,
-            "Content-Type": "application/json; charset=utf-8"}
-    data = requests.post('https://texttospeech.googleapis.com/v1/text:synthesize',json=json, headers=headers)
-    decoded_data = base64.b64decode(data.json()['audioContent'])
-    with open ('test_audio.mp3', 'wb') as f_audio:
-        f_audio.write(decoded_data)
-    return
-
-get_landmark_description("Fontana di Trevi")
