@@ -1,4 +1,5 @@
 # import datetime
+import base64
 import json
 
 # import logging
@@ -346,7 +347,6 @@ def get_landmark_description(places: list[Place]):
                     json=get_body_speech_to_text(result["summary"]),
                     headers=get_headers_speech_to_text(),
                 )
-                print("RESPONSE")
                 # Convert audio to base64 for embedding in the response
                 audio_data = get_decoded_body_from_respopnse(response.json())
                 audio_base64 = f"data:audio/mp3;base64,{audio_data.decode('utf-8')}"
@@ -359,5 +359,5 @@ def get_landmark_description(places: list[Place]):
     return {"places": results}
 
 
-places = PlacesList.search_places("Bosco Verticale Milano")
-print(get_landmark_description(places.places))
+# places = PlacesList.search_places("Fontana di Trevi")
+# print(get_landmark_description(places.places))
