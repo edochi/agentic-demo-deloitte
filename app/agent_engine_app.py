@@ -51,8 +51,8 @@ class AgentEngineApp:
         """The set_up method is used to define application initialization logic"""
         import os
 
-        for k, v in self.env_vars.items():
-            os.environ[k] = v
+        # for k, v in self.env_vars.items():
+        #     os.environ[k] = v
 
         # Lazy import agent at setup time to avoid deployment dependencies
         from app.agent import agent

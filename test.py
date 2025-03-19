@@ -32,7 +32,7 @@ vertexai.init(
 
 # agent = agents[0]
 
-agent = agent_engines.get('projects/889354480933/locations/us-central1/reasoningEngines/1016133462018490368')
+agent = agent_engines.get('projects/889354480933/locations/us-central1/reasoningEngines/7772377328004366336')
 
 
 print(agent.query(

@@ -11,8 +11,9 @@ from pydantic import (
     field_validator,
 )
 
-from app.settings import SETTINGS
+# from app.settings import SETTINGS
 
+PLACES_API_KEY = "AIzaSyDjoRzcHj72yIdFPSLTr4bJ5ywR7ltwVXY"
 
 class PlaceTypes(StrEnum):
     art_gallery = "art_gallery"
@@ -122,7 +123,7 @@ class Place(BaseModel):
 
         headers = {
             "Content-Type": "application/json",
-            "X-Goog-Api-Key": SETTINGS.places_api_key,
+            "X-Goog-Api-Key": PLACES_API_KEY,
             "X-Goog-FieldMask": field_mask,
         }
 
@@ -174,7 +175,7 @@ class PlacesList(BaseModel):
 
         headers = {
             "Content-Type": "application/json",
-            "X-Goog-Api-Key": SETTINGS.places_api_key,
+            "X-Goog-Api-Key": PLACES_API_KEY,
             "X-Goog-FieldMask": field_mask,
         }
 
@@ -312,7 +313,7 @@ def get_places_distance(origin: Place, destination: Place) -> Routes:
 
     headers = {
         "Content-Type": "application/json",
-        "X-Goog-Api-Key": SETTINGS.places_api_key,
+        "X-Goog-Api-Key": PLACES_API_KEY,
         "X-Goog-FieldMask": "routes.distanceMeters,routes.duration",
     }
 
