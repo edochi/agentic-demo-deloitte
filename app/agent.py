@@ -32,14 +32,15 @@ from langchain_core.runnables import (
 from langchain_core.tools import tool
 from langchain_core.tools.base import InjectedToolCallId
 from langchain_google_vertexai import ChatVertexAI
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.managed import IsLastStep, RemainingSteps
-from langgraph.prebuilt import InjectedState, ToolNode
+from langgraph.prebuilt import InjectedState, create_react_agent
 from langgraph.types import Command
 from pydantic import BaseModel, TypeAdapter, ValidationError
-from test_places_api import PlacesList, PlacesListSimplified, PlaceTypes
+
+from app.classes import PlacesList, PlacesListSimplified, PlaceTypes
+
+# from langgraph.checkpoint.memory import MemorySaver
 
 TOther = TypeVar("TOther")
 TBaseModel = TypeVar("TBaseModel", bound=BaseModel)
@@ -194,34 +195,8 @@ You MUST follow these steps and use tools as indicated:
 - If the user doesn't specify a theme, suggest appropriate themes for the city before searching.
 - When the user requests changes, preserve the existing structure as much as possible.
 - Always communicate with the user using the language they are using.
+- TO CALL A TOOL, USE THE TOOL SCHEMA AND THE TOOL NAME, do not use "print.(default_api...)"
 """
-
-
-# Models for Google Places API responses
-# class Location(BaseModel):
-#     lat: float
-#     lng: float
-
-
-# class PlaceResponse(TypedDict):
-#     name: str
-#     place_id: str
-#     types: list[str]
-#     vicinity: str
-#     geometry: dict[str, Any]
-#     rating: float | None
-#     user_ratings_total: int | None
-#     formatted_address: str | None
-#     photos: list[dict[str, Any]] | None
-#     price_level: int | None
-
-
-# class AgentState(TypedDict, total=False):
-#     """
-#     The state of the agent.
-#     """
-
-#     messages: Annotated[Sequence[BaseMessage], add_messages]
 
 
 class AgentState(TypedDict, total=False):
@@ -232,6 +207,7 @@ class AgentState(TypedDict, total=False):
     remaining_steps: RemainingSteps
     places_list: PlacesList
     tour: list[str]
+    places_list_tour: PlacesList
 
 
 @tool
@@ -292,13 +268,18 @@ def places_nearby(
         List of places found nearby
     """
 
-    places_list = FieldGetter(state).get_field("places_list", PlacesList, raise_error_if_missing=False)
+    places_list = FieldGetter(state).get_field(
+        "places_list", PlacesList, raise_error_if_missing=False
+    )
+
     if places_list is None:
-        places_list = PlacesList(places=[])
+        places_list = PlacesList()
+    # else:
+    #     places_list = PlacesList(places=[Place.model_validate(place_in_list) for place_in_list in places_list.places])
 
     try:
         place = places_list.get_by_display_name(place_display_name)
-        print(f'Found place {place} - OK')
+        print(f"Found place {place} - OK")
     except IndexError as e:
         try:
             places_result = PlacesList.search_places(place_display_name)
@@ -306,8 +287,8 @@ def places_nearby(
                 raise ValueError(f"No places found for {place_display_name}")
             place = places_result.places[0]
             places_list.append(place)
-            print(f'Found place {place} - OK 2')
-            print(f'Places list: {places_list} - OK 2')
+            print(f"Found place {place} - OK 2")
+            print(f"Places list: {places_list} - OK 2")
         except ValidationError as e:
             raise Exception(
                 f"Error validating place data for {place_display_name}: {e}"
@@ -352,21 +333,19 @@ def add_place_to_tour(
         Updated tour list
     """
 
-    place_display_name = place_display_name.strip()
-
     tour = FieldGetter(state).get_field("tour", list[str], raise_error_if_missing=False)
     if tour is None:
         tour = []
 
-    places_list = FieldGetter(state).get_field("places_list", PlacesList, raise_error_if_missing=False)
-    
+    places_list = FieldGetter(state).get_field(
+        "places_list", PlacesList, raise_error_if_missing=False
+    )
     if places_list is None:
-        places_list = PlacesList(places=[])
-
-    print(f'Places list: {places_list} - OK 3')
+        places_list = PlacesList()
 
     try:
         place = places_list.get_by_display_name(place_display_name)
+
     except IndexError as e:
         try:
             places_result = PlacesList.search_places(place_display_name)
@@ -383,7 +362,8 @@ def add_place_to_tour(
                 f"Error while searching for place with display name {place_display_name}: {e}"
             ) from e
 
-    tour.append(place.display_name.text)
+    tour.append(place.displayName.text)
+    places_list_tour = places_list.get_by_display_names(tour)
 
     return Command(
         update={
@@ -395,6 +375,7 @@ def add_place_to_tour(
             ],
             "tour": tour,
             "places_list": places_list,
+            "places_list_tour": places_list_tour,
         }
     )
 
@@ -420,11 +401,21 @@ def remove_place_from_tour(
     except KeyError as e:
         raise ValueError("The tour is still empty") from e
 
+    places_list = FieldGetter(state).get_field(
+        "places_list", PlacesList, raise_error_if_missing=False
+    )
+    if places_list is None:
+        places_list = PlacesList()
+
     try:
         tour.remove(place_display_name)
+        places_list_tour = places_list.get_by_display_names(tour)
     except ValueError as e:
         raise ValueError(
-            f"Place {place_display_name} not found in the tour list. Actual values in the tour list: {tour}"
+            f"Place {place_display_name} not found in the tour list. Actual values in the tour list: {tour} "
+            "If you got this error, check the spelling of the display name, but if the place is not it here "
+            "at all it means that the place you are trying to remove is not in the tour list. "
+            "In that case, just go on with the next step."
         ) from e
 
     return Command(
@@ -436,6 +427,7 @@ def remove_place_from_tour(
                 )
             ],
             "tour": tour,
+            "places_list_tour": places_list_tour,
         }
     )
 
@@ -443,122 +435,24 @@ def remove_place_from_tour(
 tools = [place_search, places_nearby, add_place_to_tour, remove_place_from_tour]
 
 
-from langgraph.prebuilt import create_react_agent
-from langchain_openai import ChatOpenAI
-
-
 llm = ChatVertexAI(
     model=LLM,
-    temperature=0.5,
+    temperature=0.2,
     max_tokens=4096,
     streaming=True,
 ).bind_tools(tools)
 
-checkpointer = MemorySaver()
+# checkpointer = MemorySaver()
 
 agent = create_react_agent(
     llm,
     tools,
     state_schema=AgentState,
     prompt=SYSTEM_PROMPT,
-    checkpointer=checkpointer,
+    # checkpointer=checkpointer,
 )
 
-
-# tools_by_name = {tool.name: tool for tool in tools}
-
-# def tool_node(state: dict):
-#     result = []
-#     for tool_call in state["messages"][-1].tool_calls:
-#         tool = tools_by_name[tool_call["name"]]
-#         observation = tool.invoke(tool_call["args"])
-#         result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"]))
-#     return {"messages": result}
-
-
-# tool_node = ToolNode(tools)
-
-# def should_continue(state: MessagesState):
-#     messages = state["messages"]
-#     last_message = messages[-1]
-#     if last_message.tool_calls:
-#         return "tools"
-#     return END
-
-
-# def call_model(state: MessagesState):
-#     messages = state["messages"]
-#     response = llm.invoke(messages)
-#     return {"messages": [response]}
-
-
-# workflow = StateGraph(MessagesState)
-
-# # Define the two nodes we will cycle between
-# workflow.add_node("agent", call_model)
-# workflow.add_node("tools", tool_node)
-
-# workflow.add_edge(START, "agent")
-# workflow.add_conditional_edges("agent", should_continue, ["tools", END])
-# workflow.add_edge("tools", "agent")
-
-# app = workflow.compile()
-
-
-# # 3. Define workflow components
-# def should_continue(state: MessagesState) -> str:
-#     """Determines whether to use tools or end the conversation."""
-#     last_message = state["messages"][-1]
-#     return "tools" if last_message.tool_calls else END # type: ignore
-
-
-# def call_model(state: MessagesState, config: RunnableConfig) -> dict[str, BaseMessage]:
-#     """Calls the language model and returns the response."""
-#     messages_with_system = [{"type": "system", "content": SYSTEM_PROMPT}] + state[
-#         "messages"
-#     ]
-#     # Forward the RunnableConfig object to ensure the agent is capable of streaming the response.
-#     response = llm.invoke(messages_with_system, config)
-#     return {"messages": response}
-
-# # 4. Create the workflow graph
-# workflow = StateGraph(MessagesState)
-# workflow.add_node("agent", call_model)
-# workflow.add_node("tools", ToolNode(tools))
-# workflow.set_entry_point("agent")
-
-# # 5. Define graph edges
-# workflow.add_conditional_edges("agent", should_continue)
-# workflow.add_edge("tools", "agent")
-
-# # 6. Compile the workflow
-# checkpointer = MemorySaver()
-# agent = workflow.compile(checkpointer=checkpointer)
-
 if __name__ == "__main__":
-    print("""
-    ╔═══════════════════════════════════════════════════════════╗
-    ║                                                           ║
-    ║   🤖 DEPLOYING AGENT TO VERTEX AI AGENT ENGINE 🤖         ║
-    ║                                                           ║
-    ╚═══════════════════════════════════════════════════════════╝
-    """)
-
-    # while True:
-    #     user_message = input("Enter your message: ")
-    #     result = agent.query(
-    #         input={
-    #             "messages": [
-    #                 (
-    #                     "user",
-    #                     user_message,
-    #                 )
-    #             ]
-    #         },
-    #         config=RunnableConfig(configurable={"thread_id": "2"}),
-    #     )
-
-    #     print(result)
 
     def print_stream(stream):
         for s in stream:
@@ -569,20 +463,6 @@ if __name__ == "__main__":
                 message.pretty_print()
 
     while True:
-        # user_message = input("Enter your message: ")
-        # result = agent.invoke(
-        #     input={
-        #         "messages": [
-        #             (
-        #                 "user",
-        #                 user_message,
-        #             )
-        #         ]
-        #     },
-        #     config=RunnableConfig(configurable={"thread_id": "2"}),
-        # )
-
-        # print(result)
         user_message = input("Enter your message: ")
         print_stream(
             agent.stream(

@@ -2,7 +2,16 @@ import json
 from enum import StrEnum
 
 import requests
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    computed_field,
+    field_validator,
+)
+
+from app.settings import SETTINGS
 
 
 class PlaceTypes(StrEnum):
@@ -46,18 +55,18 @@ class Location(BaseModel):
 
 class DisplayName(BaseModel):
     text: str
-    language_code: str = Field(alias="languageCode")
+    languageCode: str = Field(alias="languageCode")
 
 
 class LocalizedText(BaseModel):
     text: str
-    language_code: str = Field(alias="languageCode")
+    languageCode: str = Field(alias="languageCode")
 
 
 class Review(BaseModel):
     name: str
     text: LocalizedText | None = None
-    original_text: LocalizedText | None = Field(None, alias="originalText")
+    originalText: LocalizedText | None = Field(None, alias="originalText")
     rating: float
 
     model_config = ConfigDict(extra="ignore")
@@ -77,15 +86,15 @@ class GenerativeSummary(BaseModel):
 class Place(BaseModel):
     id: str
     types: list[str]
-    international_phone_number: str | None = Field(
+    internationalPhoneNumber: str | None = Field(
         None, alias="internationalPhoneNumber"
     )
-    formatted_address: str = Field(alias="formattedAddress")
+    formattedAddress: str = Field(alias="formattedAddress")
     location: Location
     rating: float | None = Field(None, ge=0, le=5)
-    website_uri: str | None = Field(None, alias="websiteUri")
-    user_rating_count: int | None = Field(None, alias="userRatingCount")
-    display_name: DisplayName = Field(alias="displayName")
+    websiteUri: str | None = Field(None, alias="websiteUri")
+    userRatingCount: int | None = Field(None, alias="userRatingCount")
+    displayName: DisplayName = Field(alias="displayName")
     reviews: list[Review] | None = None
     generative_summary: str | None = Field(None, alias="generativeSummary")
 
@@ -113,7 +122,7 @@ class Place(BaseModel):
 
         headers = {
             "Content-Type": "application/json",
-            "X-Goog-Api-Key": "AIzaSyDjoRzcHj72yIdFPSLTr4bJ5ywR7ltwVXY",  # TODO
+            "X-Goog-Api-Key": SETTINGS.places_api_key,
             "X-Goog-FieldMask": field_mask,
         }
 
@@ -142,7 +151,7 @@ class Place(BaseModel):
 
 
 class PlacesList(BaseModel):
-    places: list[Place]
+    places: list[Place] = Field(default=[])
 
     @classmethod
     def search_places(cls, query: str) -> "PlacesList":
@@ -165,7 +174,7 @@ class PlacesList(BaseModel):
 
         headers = {
             "Content-Type": "application/json",
-            "X-Goog-Api-Key": "AIzaSyDjoRzcHj72yIdFPSLTr4bJ5ywR7ltwVXY",  # TODO
+            "X-Goog-Api-Key": SETTINGS.places_api_key,
             "X-Goog-FieldMask": field_mask,
         }
 
@@ -174,11 +183,22 @@ class PlacesList(BaseModel):
         try:
             response = requests.post(url, headers=headers, data=json.dumps(data))
             response.raise_for_status()
-            return cls.model_validate(response.json())
+            response_json = response.json()
+            places = []
+            for place in response_json.get("places", []):
+                try:
+                    places.append(Place.model_validate(place))
+                except ValidationError as e:
+                    print(f"Error while validating place: {e}")
+                    continue
+            return cls(places=places)
+            # return cls.model_validate(response.json())
         except requests.exceptions.RequestException as e:
             raise Exception(f"Error while searching for places: {e}") from e
 
     def append(self, place: Place) -> None:
+        if not isinstance(place, Place):
+            raise TypeError(f"Expected Place, got {type(place)}")
         self.places.append(place)
 
     def extend(self, places: "PlacesList") -> None:
@@ -189,7 +209,7 @@ class PlacesList(BaseModel):
             return next(
                 place
                 for place in self.places
-                if place.display_name.text == display_name
+                if place.displayName.text == display_name
             )
         except StopIteration as e:
             raise IndexError(
@@ -217,11 +237,11 @@ class PlaceSimplified(BaseModel):
     @classmethod
     def from_place(cls, place: Place) -> "PlaceSimplified":
         return cls(
-            display_name=place.display_name.text,
-            address=place.formatted_address,
+            display_name=place.displayName.text,
+            address=place.formattedAddress,
             rating=place.rating,
-            website=place.website_uri,
-            phone_number=place.international_phone_number,
+            website=place.websiteUri,
+            phone_number=place.internationalPhoneNumber,
         )
 
     def get_structured_string(self) -> str:
@@ -292,8 +312,7 @@ def get_places_distance(origin: Place, destination: Place) -> Routes:
 
     headers = {
         "Content-Type": "application/json",
-        "X-Goog-Api-Key": "AIzaSyDjoRzcHj72yIdFPSLTr4bJ5ywR7ltwVXY",  # Sostituisci con la tua API key
-        # 'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline'
+        "X-Goog-Api-Key": SETTINGS.places_api_key,
         "X-Goog-FieldMask": "routes.distanceMeters,routes.duration",
     }
 
