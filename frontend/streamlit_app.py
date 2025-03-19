@@ -29,6 +29,7 @@ from frontend.utils.local_chat_history import LocalChatMessageHistory
 from frontend.utils.message_editing import MessageEditing
 from frontend.utils.multimodal_utils import format_content, get_parts_from_files
 from frontend.utils.stream_handler import Client, StreamHandler, get_chain_response
+from app.landmark_description_generator.main import PlacesList, get_landmark_description
 
 USER = "my_user"
 EMPTY_CHAT_NAME = "Empty chat"
@@ -97,9 +98,52 @@ def display_chat_message(message: dict[str, Any], index: int) -> None:
     """Display a single chat message with edit, refresh, and delete options."""
     chat_message = st.chat_message(message["type"])
     with chat_message:
-        st.markdown(format_content(message["content"]), unsafe_allow_html=True)
+        # Check if the message contains place data with mp3 files
+        if (
+            message["type"] == "ai"
+            and isinstance(message["content"], dict)
+            and "places" in message["content"]
+        ):
+            display_places_with_audio(message["content"]["places"])
+        else:
+            st.markdown(format_content(message["content"]), unsafe_allow_html=True)
         col1, col2, col3 = st.columns([2, 2, 94])
         display_message_buttons(message, index, col1, col2, col3)
+
+
+def display_places_with_audio(places: list[dict[str, Any]]) -> None:
+    """
+    Display a list of places with their descriptions and playable mp3 files.
+
+    Args:
+        places: A list of dictionaries, each containing:
+            - name: The name of the place
+            - description: A brief description of the place
+            - audio_file: The name of the mp3 file associated with the place
+    """
+    if not places:
+        st.write("No places found in the response.")
+        return
+
+    st.write("### Places of Interest")
+
+    for i, place in enumerate(places):
+        with st.expander(f"{place.get('name', f'Place {i + 1}')}"):
+            st.write(place.get("description", "No description available"))
+
+            if "audio_file" in place:
+                audio_file = place["audio_file"]
+                if audio_file.startswith("data:audio"):
+                    # Handle base64 encoded audio data
+                    st.audio(audio_file)
+                else:
+                    # Handle file path or URL
+                    try:
+                        st.audio(audio_file)
+                    except Exception as e:
+                        st.error(f"Error playing audio file: {e}")
+            else:
+                st.write("No audio file available for this place.")
 
 
 def display_message_buttons(
@@ -109,11 +153,18 @@ def display_message_buttons(
     edit_button = f"{index}_edit"
     refresh_button = f"{index}_refresh"
     delete_button = f"{index}_delete"
-    content = (
-        message["content"]
-        if isinstance(message["content"], str)
-        else message["content"][-1]["text"]
-    )
+    
+    # Handle different content formats
+    if isinstance(message["content"], dict) and "places" in message["content"]:
+        # For landmark data
+        content = f"Landmark search results"
+    elif isinstance(message["content"], str):
+        content = message["content"]
+    elif isinstance(message["content"], list) and len(message["content"]) > 0 and "text" in message["content"][-1]:
+        content = message["content"][-1]["text"]
+    else:
+        # Fallback for any other format
+        content = str(message["content"])
 
     with col1:
         st.button(label="✎", key=edit_button, type="primary")
@@ -250,15 +301,79 @@ def display_feedback(side_bar: SideBar) -> None:
             )
 
 
+def landmark_explorer() -> None:
+    """Interface for searching and exploring landmarks with descriptions and audio."""
+    st.header("Landmark Explorer")
+    
+    # Search box for landmarks
+    search_query = st.text_input("Search for landmarks", "")
+    
+    if st.button("Search") and search_query:
+        with st.spinner(f"Searching for '{search_query}'..."):
+            try:
+                # Search for places using the query
+                places = PlacesList.search_places(search_query)
+                
+                if not places.places:
+                    st.warning(f"No landmarks found for '{search_query}'")
+                else:
+                    # Get descriptions and audio for the places
+                    landmark_data = get_landmark_description(places.places)
+                    
+                    # Store the result in the session state
+                    if "landmark_results" not in st.session_state:
+                        st.session_state.landmark_results = {}
+                    st.session_state.landmark_results[search_query] = landmark_data
+                    
+                    # Add the result to the chat as an AI message
+                    session_id = st.session_state["session_id"]
+                    messages = st.session_state.user_chats[session_id]["messages"]
+                    
+                    # Add human message about the search
+                    messages.append({
+                        "type": "human",
+                        "content": f"Search for landmarks: {search_query}"
+                    })
+                    
+                    # Add AI message with the landmark data
+                    messages.append({
+                        "type": "ai",
+                        "content": landmark_data
+                    })
+                    
+                    # Force a rerun to display the new messages
+                    st.rerun()
+            
+            except Exception as e:
+                st.error(f"Error searching for landmarks: {str(e)}")
+    
+    # Display previous search results if available
+    if "landmark_results" in st.session_state and st.session_state.landmark_results:
+        st.subheader("Recent Searches")
+        for query, data in st.session_state.landmark_results.items():
+            if st.button(f"Show results for '{query}'"):
+                display_places_with_audio(data["places"])
+
+
 def main() -> None:
     """Main function to set up and run the Streamlit app."""
     setup_page()
     initialize_session_state()
     side_bar = SideBar(st=st)
+    
+    # Initialize the sidebar
     side_bar.init_side_bar()
-    display_messages()
-    handle_user_input(side_bar=side_bar)
-    display_feedback(side_bar=side_bar)
+    
+    # Tab for the main chat interface and landmark search
+    tab1, tab2 = st.tabs(["Chat", "Landmark Explorer"])
+    
+    with tab1:
+        display_messages()
+        handle_user_input(side_bar=side_bar)
+        display_feedback(side_bar=side_bar)
+    
+    with tab2:
+        landmark_explorer()
 
 
 if __name__ == "__main__":

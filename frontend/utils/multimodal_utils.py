@@ -29,11 +29,16 @@ HELP_GCS_CHECKBOX = (
 )
 
 
-def format_content(content: str | list[dict[str, Any]]) -> str:
+def format_content(content: str | list[dict[str, Any]] | dict[str, Any]) -> str:
     """Formats content as a string, handling both text and multimedia inputs."""
+    # Handle places with audio files (new document object format)
+    if isinstance(content, dict) and "places" in content:
+        # This will be handled by the display_places_with_audio function
+        return "Places information with audio files"
+
     if isinstance(content, str):
         return content
-    if len(content) == 1 and content[0]["type"] == "text":
+    if isinstance(content, list) and len(content) == 1 and content[0]["type"] == "text":
         return content[0]["text"]
     markdown = """Media:
 """
@@ -66,6 +71,12 @@ def format_content(content: str | list[dict[str, Any]]) -> str:
                         + f"""
 - {image_markdown}
 """
+                    )
+                # GCS audio files
+                elif "audio" in part["mime_type"]:
+                    audio_url = gs_uri_to_https_url(part["file_uri"])
+                    markdown = (
+                        markdown + f"- Audio file: [{part['file_uri']}]({audio_url})\n"
                     )
                 # GCS other media
                 else:
