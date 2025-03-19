@@ -314,12 +314,12 @@ def get_landmark_description(places: list[Place]):
         "national_park",
     ]
     for place in places:
-        if not bool(set(place.model_dump()["types"]) & set(possible_types)):
+        if bool(set(place.model_dump()["types"]) & set(possible_types)):
             result = get_tour_guide_summary(place.model_dump()["display_name"])
 
             if result['summary']:
                 response = requests.post(
-                    "https://texttospeech.googleapis.com/v1/text:synthesize",
+                    "https://texttospeech.googleapis.com/v1/text:synthesize?key=AIzaSyDjoRzcHj72yIdFPSLTr4bJ5ywR7ltwVXY",
                     json=get_body_speech_to_text(result["summary"]),
                     headers=get_headers_speech_to_text(),
                 )
@@ -333,5 +333,5 @@ def get_landmark_description(places: list[Place]):
             return description
 
 
-places = PlacesList.search_places("Fontana di Trevi")
+places = PlacesList.search_places("Colosseo")
 print(get_landmark_description(places.places))
